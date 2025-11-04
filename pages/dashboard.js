@@ -1,38 +1,52 @@
-import { useUser } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
+import { useUser } from '@clerk/nextjs';
+import { useRouter } from 'next/router';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// Single Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function Dashboard() {
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
+  const router = useRouter();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) fetchRequests();
-  }, [user]);
+    if (user && isLoaded) {
+      fetchRequests();
+    }
+  }, [user, isLoaded]);
 
   const fetchRequests = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('requests')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    setRequests(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('requests')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      setRequests(data || []);
+    } catch (error) {
+      console.error('Fetch error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (loading) {
+  if (loading || !isLoaded) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4 font-system">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
+  }
+
+  if (!user) {
+    router.push('/');
+    return null;
   }
 
   return (
@@ -45,8 +59,12 @@ export default function Dashboard() {
           {requests.map((req) => (
             <div key={req.id} className="p-4 border border-gray-200 rounded-xl bg-gray-50">
               <p className="font-medium text-sm">{req.need}</p>
-              {req.file_url && <p className="text-xs text-gray-500 mt-1">📎 {req.file_url.split('/').pop()}</p>}
-              <p className="text-xs text-gray-400 mt-2">Status: Processing... (created {new Date(req.created_at).toLocaleDateString()})</p>
+              {req.file_url && (
+                <p className="text-xs text-gray-500 mt-1">📎 {req.file_url.split('/').pop()}</p>
+              )}
+              <p className="text-xs text-gray-400 mt-2">
+                Status: Processing... (created {new Date(req.created_at).toLocaleDateString()})
+              </p>
             </div>
           ))}
         </div>
