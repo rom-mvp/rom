@@ -9,13 +9,13 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Stub upload (real: supabase.storage.from('files').upload())
+// Stub upload
 async function uploadFile(file) {
   console.log('Uploading:', file.name);
-  return 'https://stub-upload-url.com/' + file.name;  // Placeholder
+  return 'https://stub-upload-url.com/' + file.name;
 }
 
-// Dynamic for client-only auth
+// Dynamic auth
 const AuthComponents = dynamic(() => Promise.resolve({
   default: () => (
     <>
@@ -59,7 +59,7 @@ export default function Home() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!userNeed.trim()) return;  // Basic validation
+    if (!userNeed.trim()) return;
 
     setLoadingSubmit(true);
     try {
@@ -73,13 +73,12 @@ export default function Home() {
       if (error) throw error;
 
       setSubmitted(true);
-      // Auto-redirect after 2s
       setTimeout(() => {
         router.push('/dashboard');
       }, 2000);
     } catch (error) {
       console.error('Submit error:', error);
-      alert('Oops—try again! (Check console)');
+      alert('Oops—try again!');
     } finally {
       setLoadingSubmit(false);
     }
@@ -91,54 +90,54 @@ export default function Home() {
         {!isSignedIn ? (
           <>
             <h1 className="text-4xl font-bold text-gray-900 font-system">ROM</h1>
-            <p className="text-lg text-gray-600 font-system">from Mind to Matter</p>
+            <p className="text-sm text-gray-600 font-system">from Mind to Matter</p>
             <div className="space-y-4">
               <AuthComponents />
             </div>
           </>
         ) : (
           <>
-            <div className="space-y-2">
+            {/* No ROM here – just greeting */}
+            <div className="space-y-1">
               <h2 className="text-3xl font-semibold text-gray-900 font-system">
                 Hey {user.firstName || user.username || 'there'}!
               </h2>
-              <p className="text-lg text-gray-600 font-system">we go from mind to matter</p>
+              <p className="text-sm text-gray-600 font-system">we go from mind to matter</p>
             </div>
             
             {!submitted ? (
-              <form onSubmit={handleSubmit} className="space-y-4 w-full">
+              <form onSubmit={handleSubmit} className="space-y-3 w-full">
                 <div className="relative">
                   <textarea
                     value={userNeed}
                     onChange={(e) => setUserNeed(e.target.value)}
                     rows={4}
-                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-system text-base pr-12"  // Padding right for corner button
+                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-system text-sm pr-20"  // Extra right padding for corner
                     placeholder="What do you need AI for today? (or upload a file)"
                     required
                     disabled={loadingSubmit}
                   />
-                  {/* File upload in top-right corner */}
-                  {file ? (
+                  {/* Corner upload: Small pill in top-right */}
+                  <label className="absolute top-3 right-3 cursor-pointer">
+                    <input
+                      type="file"
+                      onChange={(e) => setFile(e.target.files[0])}
+                      accept=".csv,.txt,.json"
+                      className="hidden"
+                      disabled={loadingSubmit}
+                    />
+                    <span className="bg-blue-100 text-blue-600 px-2 py-1 rounded-full text-xs font-system hover:bg-blue-200">
+                      📎
+                    </span>
+                  </label>
+                  {file && (
                     <button
                       type="button"
-                      onClick={() => { setFile(null); }}
-                      className="absolute top-2 right-2 bg-red-100 text-red-600 px-2 py-1 rounded-full text-xs font-system hover:bg-red-200"
+                      onClick={() => setFile(null)}
+                      className="absolute top-3 right-10 bg-red-100 text-red-600 px-2 py-1 rounded-full text-xs font-system hover:bg-red-200"
                     >
-                      × {file.name.slice(-10)}  {/* Truncated name */}
+                      ×
                     </button>
-                  ) : (
-                    <label className="absolute top-2 right-2 cursor-pointer">
-                      <input
-                        type="file"
-                        onChange={(e) => setFile(e.target.files[0])}
-                        accept=".csv,.txt,.json"
-                        className="hidden"
-                        disabled={loadingSubmit}
-                      />
-                      <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-xs font-system hover:bg-blue-200">
-                        📎 Upload
-                      </span>
-                    </label>
                   )}
                 </div>
                 <button
@@ -151,10 +150,10 @@ export default function Home() {
               </form>
             ) : (
               <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl">
-                <p className="font-system text-sm">Got it! We're processing your request. Redirecting...</p>
+                <p className="font-system text-xs">Got it! We're processing your request. Redirecting...</p>
                 <button
                   onClick={() => { setSubmitted(false); setUserNeed(''); setFile(null); }}
-                  className="mt-2 text-blue-600 underline font-system text-sm"
+                  className="mt-1 text-blue-600 underline font-system text-xs"
                 >
                   New Request
                 </button>
