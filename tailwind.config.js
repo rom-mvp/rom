@@ -5,9 +5,17 @@ module.exports = {
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
-  theme: {
-    extend: {},
+ theme: {
+  extend: {
+    fontFamily: {
+      system: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+    },
+    fontSize: {
+      xs: ['0.75rem', { lineHeight: '1rem' }],  // For tiny text
+      sm: ['0.875rem', { lineHeight: '1.25rem' }],
+    },
   },
+},
  plugins: [
   function({ addUtilities }) {
     addUtilities({
