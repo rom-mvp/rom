@@ -46,10 +46,9 @@ export default function Home() {
     e.preventDefault();
     console.log('User need:', userNeed, 'File:', file);
     setSubmitted(true);
-    // Day 2: Redirect to /dashboard?need=[userNeed]
-    // window.location.href = `/dashboard?need=${encodeURIComponent(userNeed)}`;
+await supabase.from('requests').insert({ user_id: user.id, need: userNeed, file_url: file ? await uploadFile(file) : null });
   };
-
+router.push('/dashboard');
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
       <div className="text-center max-w-md w-full space-y-6">
