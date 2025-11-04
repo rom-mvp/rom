@@ -21,8 +21,8 @@ const AuthComponents = dynamic(() => Promise.resolve({
     <>
       <SignedOut>
         <SignInButton mode="modal">
-          <button className="glass-button font-system">
-            Get Started For Free
+          <button className="user-friendly-button">
+            Get Started For Free →
           </button>
         </SignInButton>
       </SignedOut>
@@ -50,7 +50,7 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="text-center">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4 font-system">ROM</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-4 font-system">ROM</h1>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
         </div>
       </div>
@@ -73,7 +73,7 @@ export default function Home() {
       if (error) throw error;
 
       setSubmitted(true);
-      // Auto-redirect after 2s (or remove for manual)
+      // Auto-redirect after 2s
       setTimeout(() => {
         router.push('/dashboard');
       }, 2000);
@@ -87,11 +87,10 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
-      <div className="text-center max-w-md w-full space-y-6">
-        <h1 className="text-5xl font-bold text-gray-900 font-system">ROM</h1>
-        
+      <div className="text-center max-w-md w-full space-y-4">
         {!isSignedIn ? (
           <>
+            <h1 className="text-4xl font-bold text-gray-900 font-system">ROM</h1>
             <p className="text-lg text-gray-600 font-system">from Mind to Matter</p>
             <div className="space-y-4">
               <AuthComponents />
@@ -100,46 +99,54 @@ export default function Home() {
         ) : (
           <>
             <div className="space-y-2">
-              <h2 className="text-4xl font-semibold text-gray-900 font-system">
+              <h2 className="text-3xl font-semibold text-gray-900 font-system">
                 Hey {user.firstName || user.username || 'there'}!
               </h2>
-              <p className="text-xl text-gray-600 font-system">we go from mind to matter</p>
+              <p className="text-lg text-gray-600 font-system">we go from mind to matter</p>
             </div>
             
             {!submitted ? (
               <form onSubmit={handleSubmit} className="space-y-4 w-full">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 font-system">
-                    What do you need AI for today?
-                  </label>
+                <div className="relative">
                   <textarea
                     value={userNeed}
                     onChange={(e) => setUserNeed(e.target.value)}
                     rows={4}
-                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-system text-base"
-                    placeholder="Describe your task or upload a file..."
+                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-system text-base pr-12"  // Padding right for corner button
+                    placeholder="What do you need AI for today? (or upload a file)"
                     required
                     disabled={loadingSubmit}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 font-system">
-                    Or upload data (CSV, TXT, etc.)
-                  </label>
-                  <input
-                    type="file"
-                    onChange={(e) => setFile(e.target.files[0])}
-                    accept=".csv,.txt,.json"
-                    className="w-full p-3 border border-gray-300 rounded-xl font-system text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                    disabled={loadingSubmit}
-                  />
+                  {/* File upload in top-right corner */}
+                  {file ? (
+                    <button
+                      type="button"
+                      onClick={() => { setFile(null); }}
+                      className="absolute top-2 right-2 bg-red-100 text-red-600 px-2 py-1 rounded-full text-xs font-system hover:bg-red-200"
+                    >
+                      × {file.name.slice(-10)}  {/* Truncated name */}
+                    </button>
+                  ) : (
+                    <label className="absolute top-2 right-2 cursor-pointer">
+                      <input
+                        type="file"
+                        onChange={(e) => setFile(e.target.files[0])}
+                        accept=".csv,.txt,.json"
+                        className="hidden"
+                        disabled={loadingSubmit}
+                      />
+                      <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-xs font-system hover:bg-blue-200">
+                        📎 Upload
+                      </span>
+                    </label>
+                  )}
                 </div>
                 <button
                   type="submit"
                   disabled={loadingSubmit}
-                  className="glass-button w-full font-system disabled:opacity-50"
+                  className="user-friendly-button w-full"
                 >
-                  {loadingSubmit ? 'Sending...' : 'Send to Next Steps'}
+                  {loadingSubmit ? 'Sending...' : 'Send to Next Steps →'}
                 </button>
               </form>
             ) : (
