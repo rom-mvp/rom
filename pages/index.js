@@ -8,7 +8,7 @@ const AuthComponents = dynamic(() => Promise.resolve({
     <>
       <SignedOut>
         <SignInButton mode="modal">
-          <button className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg text-lg">
+          <button className="glass-button">
             Get Started Free
           </button>
         </SignInButton>
@@ -23,8 +23,8 @@ const AuthComponents = dynamic(() => Promise.resolve({
 export default function Home() {
   const { isLoaded, isSignedIn, user } = useUser();
   const [isClient, setIsClient] = useState(false);
-  const [userNeed, setUserNeed] = useState('');  // For the input box
-  const [file, setFile] = useState(null);  // For upload
+  const [userNeed, setUserNeed] = useState('');
+  const [file, setFile] = useState(null);
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
@@ -33,10 +33,9 @@ export default function Home() {
 
   if (!isClient || !isLoaded) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="text-center">
-          <h1 className="text-6xl font-bold text-gray-900 mb-4">Rom</h1>
-          <p className="text-xl text-gray-600 mb-8">from Mind to Matter</p>
+          <h1 className="text-6xl font-bold text-gray-900 mb-4 font-system">ROM</h1>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
         </div>
       </div>
@@ -45,70 +44,72 @@ export default function Home() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Stub: Save to Supabase or HF API later. For now, just set submitted.
     console.log('User need:', userNeed, 'File:', file);
     setSubmitted(true);
-    // TODO: Redirect to /dashboard or process AI
+    // Day 2: Redirect to /dashboard?need=[userNeed]
+    // window.location.href = `/dashboard?need=${encodeURIComponent(userNeed)}`;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col items-center justify-center p-4">
-      <div className="text-center max-w-md w-full">
-        <h1 className="text-6xl font-bold text-gray-900 mb-2">Rom</h1>
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
+      <div className="text-center max-w-md w-full space-y-6">
+        <h1 className="text-6xl font-bold text-gray-900 font-system">ROM</h1>
         
         {!isSignedIn ? (
           <>
-            <p className="text-xl text-gray-600 mb-8">from Mind to Matter</p>
+            <p className="text-lg text-gray-600 font-system">from Mind to Matter</p>
             <div className="space-y-4">
               <AuthComponents />
             </div>
           </>
         ) : (
           <>
-            <h2 className="text-2xl font-semibold text-gray-700 mb-4">
-              Heya {user.firstName || user.username || 'there'}!
-            </h2>
-            <p className="text-lg text-gray-600 mb-8">from Mind to Matter</p>
+            <div className="space-y-2">
+              <h2 className="text-4xl font-semibold text-gray-900 font-system">
+                Hey {user.firstName || user.username || 'there'}!
+              </h2>
+              <p className="text-xl text-gray-600 font-system">we go from mind to matter</p>
+            </div>
             
             {!submitted ? (
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4 w-full">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    What do you need AI for today? (e.g., "Analyze my sales data")
+                  <label className="block text-sm font-medium text-gray-700 mb-2 font-system">
+                    What do you need AI for today?
                   </label>
                   <textarea
                     value={userNeed}
                     onChange={(e) => setUserNeed(e.target.value)}
                     rows={4}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-system text-base"
                     placeholder="Describe your task or upload a file..."
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2 font-system">
                     Or upload data (CSV, TXT, etc.)
                   </label>
                   <input
                     type="file"
                     onChange={(e) => setFile(e.target.files[0])}
                     accept=".csv,.txt,.json"
-                    className="w-full p-3 border border-gray-300 rounded-lg"
+                    className="w-full p-3 border border-gray-300 rounded-xl font-system text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg text-lg"
+                  className="glass-button w-full"
                 >
                   Send to Next Steps
                 </button>
               </form>
             ) : (
-              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
-                <p>Got it! We're processing your request. Check back soon or head to dashboard.</p>
+              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl">
+                <p className="font-system text-sm">Got it! We're processing your request.</p>
                 <button
                   onClick={() => { setSubmitted(false); setUserNeed(''); setFile(null); }}
-                  className="mt-2 text-blue-600 underline"
+                  className="mt-2 text-blue-600 underline font-system text-sm"
                 >
                   New Request
                 </button>
