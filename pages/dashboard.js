@@ -56,19 +56,22 @@ export default function Dashboard() {
         <p className="text-sm text-gray-600">No requests yet. Head back to make one!</p>
       ) : (
         <div className="space-y-3">
-          {requests.map((req) => (
-            <div key={req.id} className="p-4 border border-gray-200 rounded-xl bg-gray-50">
-              <p className="font-medium text-sm">{req.need}</p>
-              {req.file_url && (
-                <p className="text-xs text-gray-500 mt-1">📎 {req.file_url.split('/').pop()}</p>
-              )}
-              <p className="text-xs text-gray-400 mt-2">
-                Status: Processing... (created {new Date(req.created_at).toLocaleDateString()})
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
+  {requests.map((req) => (
+  <div key={req.id} className="p-4 border border-gray-200 rounded-xl bg-gray-50">
+    <p className="font-medium text-sm mb-2">{req.need}</p>
+    {req.file_url && (
+      <p className="text-xs text-gray-500 mb-2">📎 {req.file_url.split('/').pop()}</p>
+    )}
+    <p className="text-xs text-gray-400 mb-2">
+      Status: {req.status} (created {new Date(req.created_at).toLocaleDateString()})
+    </p>
+    {req.result && (
+      <div className="mt-2 p-2 bg-white border rounded-lg">
+        <p className="text-xs text-gray-800">{req.result}</p>
+      </div>
+    )}
+  </div>
+))}
       <button
         onClick={() => router.push('/')}
         className="mt-6 user-friendly-button w-full max-w-xs mx-auto"
