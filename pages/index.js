@@ -9,7 +9,7 @@ const AuthComponents = dynamic(() => Promise.resolve({
       <SignedOut>
         <SignInButton mode="modal">
           <button className="glass-button">
-            Get Started Free
+            Get Started For Free
           </button>
         </SignInButton>
       </SignedOut>
@@ -35,7 +35,7 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="text-center">
-          <h1 className="text-6xl font-bold text-gray-900 mb-4 font-system">ROM</h1>
+          <h1 className="text-5xl font-bold text-gray-900 mb-4 font-system">ROM</h1>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
         </div>
       </div>
@@ -52,7 +52,7 @@ router.push('/dashboard');
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
       <div className="text-center max-w-md w-full space-y-6">
-        <h1 className="text-6xl font-bold text-gray-900 font-system">ROM</h1>
+        <h1 className="text-5l font-bold text-gray-900 font-system"></h1>
         
         {!isSignedIn ? (
           <>
@@ -64,17 +64,16 @@ router.push('/dashboard');
         ) : (
           <>
             <div className="space-y-2">
-              <h2 className="text-4xl font-semibold text-gray-900 font-system">
+              <h2 className="text-4l font-semibold text-gray-900 font-system">
                 Hey {user.firstName || user.username || 'there'}!
               </h2>
-              <p className="text-xl text-gray-600 font-system">we go from mind to matter</p>
+              <p className="text-l text-gray-600 font-system">we go from mind to matter</p>
             </div>
             
             {!submitted ? (
               <form onSubmit={handleSubmit} className="space-y-4 w-full">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2 font-system">
-                    What do you need AI for today?
                   </label>
                   <textarea
                     value={userNeed}
