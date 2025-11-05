@@ -69,47 +69,53 @@ const handleSubmit = async (e) => {
       user_id: user.id,
       need: userNeed,
       file_url: fileUrl,
-      status: 'processing',  // Start as processing
-      result: null  // Will update with AI output
+      status: 'processing',
+      result: null
     });
     if (error) throw error;
 
-    // HF AI Magic: Match to template (simple for MVP)
-    const aiResult = await generateGrowthPlan(userNeed);  // New func below
-    await supabase.from('requests').update({ 
-      status: 'complete', 
-      result: aiResult 
-    }).eq('id', data[0].id);
+    // AI Process: Call HF
+    const aiResult = await generateGrowthPlan(userNeed);
+    const { error: updateError } = await supabase
+      .from('requests')
+      .update({ status: 'complete', result: aiResult })
+      .eq('id', data[0].id);
+    if (updateError) throw updateError;
 
     setSubmitted(true);
-    setTimeout(() => {
-      router.push('/dashboard');
-    }, 1500);  // Faster for demo
+    setTimeout(() => router.push('/dashboard'), 1500);
   } catch (error) {
-    console.error('Submit error:', error);
-    alert('Oops—try again!');
+    console.error('Submit error:', error.message);
+    // Fallback: Update to failed
+    if (data) {
+      await supabase.from('requests').update({ status: 'failed' }).eq('id', data[0].id);
+    }
+    alert(`AI hiccup: ${error.message}. Try refresh—status updated to failed.`);
   } finally {
     setLoadingSubmit(false);
   }
 };
 
-// New: HF Text Gen for Growth Plan (stub – expand for templates)
+// Enhanced HF Gen (Matches B2B/growth, fallback)
 async function generateGrowthPlan(need) {
-  if (!need.toLowerCase().includes('growth plan') && !need.toLowerCase().includes('b2b')) return 'Generic response: Coming soon!';
+  const lowerNeed = need.toLowerCase();
+  if (!lowerNeed.includes('growth') && !lowerNeed.includes('b2b') && !lowerNeed.includes('plan')) {
+    return 'Quick tip: For B2B growth, start with customer interviews. Full plan in Pro tier!';
+  }
 
-  const HF_TOKEN = process.env.HUGGING_FACE_TOKEN;  // Add to Vercel env
-  const response = await fetch('https://api-inference.huggingface.co/models/gpt2', {
+  const HF_TOKEN = process.env.HUGGING_FACE_TOKEN;
+  if (!HF_TOKEN) throw new Error('HF token missing—check Vercel env');
+
+  const response = await fetch('https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium', {  // Better for plans than gpt2
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${HF_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ inputs: `Generate a B2B startup growth plan based on: ${need}` }),
+    headers: { 'Authorization': `Bearer ${HF_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inputs: `Create a step-by-step B2B startup growth plan: ${need}` }),
   });
-  const { generated_text } = await response.json();
-  return generated_text.slice(0, 500) + '... (full plan in Pro)';  // Truncate for MVP
-}
 
+  if (!response.ok) throw new Error(`HF API error: ${response.status} - Model busy? Try again.`);
+  const { generated_text } = await response.json();
+  return generated_text.slice(0, 400) + '\n\n(Pro: Download PDF + custom tweaks)';
+}
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
       <div className="text-center max-w-md w-full space-y-4">
