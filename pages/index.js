@@ -63,16 +63,108 @@ const handleSubmit = async (e) => {
 
   setLoadingSubmit(true);
   try {
-    console.log('User need:', userNeed, 'File:', file);
+    console.log('Generating plan for:', userNeed);
     const fileUrl = file ? await uploadFile(file) : null;
+
+    // 1. Insert stub row
     const { data, error } = await supabase.from('requests').insert({
       user_id: user.id,
       need: userNeed,
       file_url: fileUrl,
-      status: 'processing',
+      status: 'generating',  // Flash for UX
+      phases: null,
       result: null
     });
     if (error) throw error;
+    const requestId = data[0].id;
+
+    // 2. Run Pipeline: Patterns + Trends → LLM Plan
+    const plan = await generatePlan(userNeed);
+
+    // 3. Update to complete + JSON
+    const { error: updateError } = await supabase
+      .from('requests')
+      .update({ 
+        status: 'complete', 
+        phases: plan.phases, 
+        result: plan 
+      })
+      .eq('id', requestId);
+    if (updateError) throw updateError;
+
+    console.log('Plan ready:', plan.goal);
+    setSubmitted(true);
+    setTimeout(() => router.push('/dashboard'), 1000);  // Quick flash
+  } catch (error) {
+    console.error('Gen error:', error);
+    await supabase.from('requests').update({ status: 'failed', result: { error: error.message } }).eq('id', data[0].id);
+    alert('Gen failed—check dashboard for details.');
+  } finally {
+    setLoadingSubmit(false);
+  }
+};
+
+// Pipeline: Skeleton Adapted for HF (Patterns + Trends → JSON Plan)
+async function generatePlan(request) {
+  // 1. Fetch Patterns (HF sim embeddings – gen similar templates)
+  const templates = await fetchSimilarTemplates(request, 3);
+
+  // 2. Extract Keywords
+  const keywords = request.toLowerCase().match(/\b\w+\b/g)?.slice(0, 5) || [];
+
+  // 3. Fetch Trends (HF gen snippets)
+  const trends = await fetchTrends(keywords, 5);
+
+  // 4. Build Prompt + Call LLM (JSON-only output)
+  const messages = buildPrompt(templates, trends, request);
+  const plan = await callLLM(messages);
+
+  return plan;  // { goal, phases: [{title, tasks: [...]}] }
+}
+
+// Helpers (From Skeleton, HF-Adapted)
+async function fetchSimilarTemplates(query, k = 3) {
+  const response = await hf.textGeneration({
+    model: 'sentence-transformers/all-MiniLM-L6-v2',  // Embed sim via gen
+    inputs: `Generate 3 JSON plan templates similar to query: "${query}". Match schema: ${JSON.stringify(require('./planSchema.json'))}`,
+    max_new_tokens: 400,
+  });
+  // Parse as array (MVP hack – prod: Real vector search)
+  return JSON.parse(response.generated_text.match(/\[.*\]/s)?.[0] || '[]').slice(0, k);
+}
+
+async function fetchTrends(keywords, topN = 5) {
+  const prompt = `Generate 5 recent trends for: ${keywords.join(', ')}. Format: [{title, summary (short), url: 'n/a', date: '2025-11'}]`;
+  const response = await hf.textGeneration({
+    model: 'microsoft/DialoGPT-medium',
+    inputs: prompt,
+    max_new_tokens: 300,
+  });
+  return JSON.parse(response.generated_text.match(/\[.*\]/s)?.[0] || '[]').slice(0, topN);
+}
+
+function buildPrompt(templates, trends, request) {
+  const system = `Strategic planner. Output ONLY JSON plan: goal (string), phases (array of {title, tasks: [{task_id, title, owner, start_date, end_date, success_metric, creative_shift}]}). Use templates + trends. Request: ${request}`;
+  const fewShot = templates.map(t => JSON.stringify(t)).join('\n---\n');
+  const user = `Trends: ${JSON.stringify(trends.map(t => `${t.title}: ${t.summary}`))}`;
+
+  return [
+    { role: 'system', content: system },
+    { role: 'assistant', content: fewShot },
+    { role: 'user', content: user },
+  ];
+}
+
+async function callLLM(messages) {
+  const prompt = messages.map(m => `${m.role}: ${m.content}`).join('\n');
+  const response = await hf.textGeneration({
+    model: 'microsoft/DialoGPT-medium',
+    inputs: prompt,
+    max_new_tokens: 600,
+  });
+  const jsonStr = response.generated_text.trim().match(/\{.*\}/s)?.[0] || '{}';
+  return JSON.parse(jsonStr);
+}
 
     // AI Process: Call HF
     const aiResult = await generateGrowthPlan(userNeed);
