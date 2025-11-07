@@ -56,19 +56,20 @@ export default function Dashboard() {
         <p className="text-sm text-gray-600">No requests yet. Head back to make one!</p>
       ) : (
         <div className="space-y-3">
- {requests.map((req) => (
-  <div key={req.id} className="p-4 border border-gray-200 rounded-xl bg-gray-50">
+{requests.map((req) => (
+  <div key={req.id} className="p-4 border border-gray-200 rounded-xl bg-gray-50 mb-4">
     <p className="font-medium text-sm mb-2">{req.need}</p>
     {req.file_url && <p className="text-xs text-gray-500 mb-2">📎 {req.file_url.split('/').pop()}</p>}
-    <p className="text-xs text-gray-400 mb-2">
-      Status: {req.status} {req.status === 'failed' && '(Retry from home)'} (created {new Date(req.created_at).toLocaleDateString()})
-    </p>
-    {req.result && (
-      <div className="mt-2 p-3 bg-white border rounded-lg">
-        <h4 className="text-xs font-semibold text-gray-800 mb-1">AI Output:</h4>
-        <p className="text-xs text-gray-700 leading-relaxed">{req.result}</p>
-      </div>
+    <p className="text-xs text-gray-400 mb-2">Status: {req.status} (created {new Date(req.created_at).toLocaleDateString()})</p>
+    {req.result && req.status === 'complete' ? (
+      <PlanGrid plan={req.result} onDiff={handleDiff} planId={req.id} />  // New grid
+    ) : req.status === 'failed' ? (
+      <p className="text-xs text-red-500">Failed: {req.result?.error}</p>
+    ) : (
+      <p className="text-xs text-gray-500">Generating...</p>
     )}
+  </div>
+))}
   </div>
 ))}
       <button
