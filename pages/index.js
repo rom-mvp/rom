@@ -1,13 +1,18 @@
+```jsx
 import { useState, useEffect } from 'react';
 import { useUser, UserButton, SignedIn, SignedOut, SignInButton } from '@clerk/nextjs';
 import { useRouter } from 'next/router';
 import { createClient } from '@supabase/supabase-js';
 import dynamic from 'next/dynamic';
+import { HfInference } from '@huggingface/inference';
 
 // Supabase client (env vars in Vercel)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// HF client
+const hf = new HfInference(process.env.HUGGING_FACE_TOKEN);
 
 // Stub upload
 async function uploadFile(file) {
@@ -57,157 +62,206 @@ export default function Home() {
     );
   }
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!userNeed.trim()) return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!userNeed.trim()) return;
 
-  setLoadingSubmit(true);
-  try {
-    console.log('Generating plan for:', userNeed);
-    const fileUrl = file ? await uploadFile(file) : null;
+    setLoadingSubmit(true);
+    let requestId = null;
+    try {
+      console.log('1. Inserting stub...');
+      const fileUrl = file ? await uploadFile(file) : null;
+      const { data, error } = await supabase.from('requests').insert({
+        user_id: user.id,
+        need: userNeed,
+        file_url: fileUrl,
+        status: 'generating',
+        phases: [],
+        result: {}
+      });
+      if (error) throw new Error(`Insert: ${error.message}`);
+      requestId = data[0].id;
+      console.log('2. Stub ID:', requestId);
 
-    // 1. Insert stub row
-    const { data, error } = await supabase.from('requests').insert({
-      user_id: user.id,
-      need: userNeed,
-      file_url: fileUrl,
-      status: 'generating',  // Flash for UX
-      phases: null,
-      result: null
-    });
-    if (error) throw error;
-    const requestId = data[0].id;
+      console.log('3. Generating structured plan...');
+      const plan = await generateStructuredPlan(userNeed);
+      console.log('4. Plan preview:', plan.goal);
 
-    // 2. Run Pipeline: Patterns + Trends → LLM Plan
-    const plan = await generatePlan(userNeed);
+      console.log('5. Updating DB...');
+      const { error: updateError } = await supabase
+        .from('requests')
+        .update({ 
+          status: 'complete', 
+          phases: plan.phases, 
+          result: plan 
+        })
+        .eq('id', requestId);
+      if (updateError) throw new Error(`Update: ${updateError.message}`);
 
-    // 3. Update to complete + JSON
-    const { error: updateError } = await supabase
-      .from('requests')
-      .update({ 
-        status: 'complete', 
-        phases: plan.phases, 
-        result: plan 
-      })
-      .eq('id', requestId);
-    if (updateError) throw updateError;
-
-    console.log('Plan ready:', plan.goal);
-    setSubmitted(true);
-    setTimeout(() => router.push('/dashboard'), 1000);  // Quick flash
-  } catch (error) {
-    console.error('Gen error:', error);
-    await supabase.from('requests').update({ status: 'failed', result: { error: error.message } }).eq('id', data[0].id);
-    alert('Gen failed—check dashboard for details.');
-  } finally {
-    setLoadingSubmit(false);
-  }
-};
-
-// Pipeline: Skeleton Adapted for HF (Patterns + Trends → JSON Plan)
-async function generatePlan(request) {
-  // 1. Fetch Patterns (HF sim embeddings – gen similar templates)
-  const templates = await fetchSimilarTemplates(request, 3);
-
-  // 2. Extract Keywords
-  const keywords = request.toLowerCase().match(/\b\w+\b/g)?.slice(0, 5) || [];
-
-  // 3. Fetch Trends (HF gen snippets)
-  const trends = await fetchTrends(keywords, 5);
-
-  // 4. Build Prompt + Call LLM (JSON-only output)
-  const messages = buildPrompt(templates, trends, request);
-  const plan = await callLLM(messages);
-
-  return plan;  // { goal, phases: [{title, tasks: [...]}] }
-}
-
-// Helpers (From Skeleton, HF-Adapted)
-async function fetchSimilarTemplates(query, k = 3) {
-  const response = await hf.textGeneration({
-    model: 'sentence-transformers/all-MiniLM-L6-v2',  // Embed sim via gen
-    inputs: `Generate 3 JSON plan templates similar to query: "${query}". Match schema: ${JSON.stringify(require('./planSchema.json'))}`,
-    max_new_tokens: 400,
-  });
-  // Parse as array (MVP hack – prod: Real vector search)
-  return JSON.parse(response.generated_text.match(/\[.*\]/s)?.[0] || '[]').slice(0, k);
-}
-
-async function fetchTrends(keywords, topN = 5) {
-  const prompt = `Generate 5 recent trends for: ${keywords.join(', ')}. Format: [{title, summary (short), url: 'n/a', date: '2025-11'}]`;
-  const response = await hf.textGeneration({
-    model: 'microsoft/DialoGPT-medium',
-    inputs: prompt,
-    max_new_tokens: 300,
-  });
-  return JSON.parse(response.generated_text.match(/\[.*\]/s)?.[0] || '[]').slice(0, topN);
-}
-
-function buildPrompt(templates, trends, request) {
-  const system = `Strategic planner. Output ONLY JSON plan: goal (string), phases (array of {title, tasks: [{task_id, title, owner, start_date, end_date, success_metric, creative_shift}]}). Use templates + trends. Request: ${request}`;
-  const fewShot = templates.map(t => JSON.stringify(t)).join('\n---\n');
-  const user = `Trends: ${JSON.stringify(trends.map(t => `${t.title}: ${t.summary}`))}`;
-
-  return [
-    { role: 'system', content: system },
-    { role: 'assistant', content: fewShot },
-    { role: 'user', content: user },
-  ];
-}
-
-async function callLLM(messages) {
-  const prompt = messages.map(m => `${m.role}: ${m.content}`).join('\n');
-  const response = await hf.textGeneration({
-    model: 'microsoft/DialoGPT-medium',
-    inputs: prompt,
-    max_new_tokens: 600,
-  });
-  const jsonStr = response.generated_text.trim().match(/\{.*\}/s)?.[0] || '{}';
-  return JSON.parse(jsonStr);
-}
-
-    // AI Process: Call HF
-    const aiResult = await generateGrowthPlan(userNeed);
-    const { error: updateError } = await supabase
-      .from('requests')
-      .update({ status: 'complete', result: aiResult })
-      .eq('id', data[0].id);
-    if (updateError) throw updateError;
-
-    setSubmitted(true);
-    setTimeout(() => router.push('/dashboard'), 1500);
-  } catch (error) {
-    console.error('Submit error:', error.message);
-    // Fallback: Update to failed
-    if (data) {
-      await supabase.from('requests').update({ status: 'failed' }).eq('id', data[0].id);
+      console.log('6. Done – Redirecting');
+      setSubmitted(true);
+      setTimeout(() => router.push('/dashboard'), 500);
+    } catch (error) {
+      console.error('Error chain:', error.message);
+      if (requestId) {
+        await supabase.from('requests').update({ 
+          status: 'failed', 
+          result: { error: error.message, fallback: generateFallbackPlan(userNeed) }
+        }).eq('id', requestId);
+      }
+      alert(`Gen failed: ${error.message}. Fallback plan in dashboard.`);
+    } finally {
+      setLoadingSubmit(false);
     }
-    alert(`AI hiccup: ${error.message}. Try refresh—status updated to failed.`);
-  } finally {
-    setLoadingSubmit(false);
+  };
+
+  // Structured Gen: HF Pipeline + Fallback (B2B-Focused)
+  async function generateStructuredPlan(need) {
+    try {
+      // 1. Patterns (HF sim – gen examples)
+      const templates = await fetchPatterns(need, 2);
+      console.log('Patterns:', templates.length);
+
+      // 2. Trends (HF snippets)
+      const keywords = need.toLowerCase().match(/\b\w+\b/g)?.slice(0, 4) || ['growth', 'b2b'];
+      const trends = await fetchTrends(keywords, 3);
+      console.log('Trends:', trends.length);
+
+      // 3. Prompt + LLM (JSON with instructions/examples)
+      const prompt = buildPlanPrompt(templates, trends, need);
+      const response = await hf.textGeneration({
+        model: 'microsoft/DialoGPT-medium',
+        inputs: prompt,
+        max_new_tokens: 500,
+      });
+      const jsonStr = response.generated_text.trim().match(/\{.*\}/s)?.[0] || '{}';
+      const plan = JSON.parse(jsonStr);
+
+      // Enforce schema (add instructions/examples if missing)
+      plan.phases = plan.phases || [];
+      plan.phases.forEach(phase => {
+        phase.tasks.forEach(task => {
+          task.instruction = task.instruction || 'Follow standard process.';
+          task.example = task.example || 'E.g., survey 50 leads.';
+        });
+      });
+
+      return plan;
+    } catch (hfError) {
+      console.log('HF failed, using fallback');
+      return generateFallbackPlan(need);
+    }
   }
-};
 
-// Enhanced HF Gen (Matches B2B/growth, fallback)
-async function generateGrowthPlan(need) {
-  const lowerNeed = need.toLowerCase();
-  if (!lowerNeed.includes('growth') && !lowerNeed.includes('b2b') && !lowerNeed.includes('plan')) {
-    return 'Quick tip: For B2B growth, start with customer interviews. Full plan in Pro tier!';
+  // Fallback: Hardcoded B2B Structure (Always Works)
+  function generateFallbackPlan(need) {
+    return {
+      goal: `Growth Plan for B2B Startup: ${need}`,
+      phases: [
+        {
+          title: "Phase 1: Validate Market",
+          tasks: [
+            {
+              task_id: "V1",
+              title: "Customer Interviews",
+              owner: "CEO",
+              start_date: "2025-11-10",
+              end_date: "2025-11-20",
+              success_metric: "20 interviews completed",
+              instruction: "Schedule calls with potential customers to validate pain points.",
+              example: "Use Calendly for booking; ask 'What frustrates you most in B2B sales?'"
+            },
+            {
+              task_id: "V2",
+              title: "Competitor Analysis",
+              owner: "Product Lead",
+              start_date: "2025-11-15",
+              end_date: "2025-11-25",
+              success_metric: "SWOT report drafted",
+              instruction: "Map competitors' features and pricing.",
+              example: "Tools: SimilarWeb, G2 reviews; output Google Doc with gaps."
+            }
+          ]
+        },
+        {
+          title: "Phase 2: Build MVP",
+          tasks: [
+            {
+              task_id: "B1",
+              title: "Prototype Development",
+              owner: "Dev Team",
+              start_date: "2025-11-25",
+              end_date: "2025-12-10",
+              success_metric: "Clickable prototype ready",
+              instruction: "Prioritize core features based on validation.",
+              example: "Use Figma for wireframes; test with 5 users via UserTesting.com."
+            },
+            {
+              task_id: "B2",
+              title: "Beta Launch Prep",
+              owner: "Marketing",
+              start_date: "2025-12-05",
+              end_date: "2025-12-15",
+              success_metric: "Landing page live",
+              instruction: "Create waitlist and teaser content.",
+              example: "Tools: Carrd for page, Mailchimp for signups; aim for 100 leads."
+            }
+          ]
+        },
+        {
+          title: "Phase 3: Scale & Iterate",
+          tasks: [
+            {
+              task_id: "S1",
+              title: "Metrics Tracking",
+              owner: "Ops",
+              start_date: "2025-12-15",
+              end_date: "2025-12-31",
+              success_metric: "10 paying users",
+              instruction: "Set up analytics and feedback loops.",
+              example: "Google Analytics + Hotjar; weekly review meetings."
+            },
+            {
+              task_id: "S2",
+              title: "Funding Pitch",
+              owner: "CEO",
+              start_date: "2025-12-20",
+              end_date: "2026-01-10",
+              success_metric: "Pitch deck sent to 5 VCs",
+              instruction: "Refine deck with traction data.",
+              example: "Template: Sequoia pitch deck; highlight 20% MoM growth."
+            }
+          ]
+        }
+      ]
+    };
   }
 
-  const HF_TOKEN = process.env.HUGGING_FACE_TOKEN;
-  if (!HF_TOKEN) throw new Error('HF token missing—check Vercel env');
+  // HF Helpers
+  async function fetchPatterns(query, k = 2) {
+    const prompt = `Generate ${k} example JSON plan templates for: "${query}". Format as array of objects with goal and phases (2 phases, 2 tasks each).`;
+    const response = await hf.textGeneration({ model: 'microsoft/DialoGPT-medium', inputs: prompt, max_new_tokens: 300 });
+    return JSON.parse(response.generated_text.match(/\[.*\]/s)?.[0] || '[]');
+  }
 
-  const response = await fetch('https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium', {  // Better for plans than gpt2
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${HF_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ inputs: `Create a step-by-step B2B startup growth plan: ${need}` }),
-  });
+  async function fetchTrends(keywords, topN = 3) {
+    const prompt = `Generate ${topN} recent trends for: ${keywords.join(', ')}. Format as array [{title, summary: 'short desc'}].`;
+    const response = await hf.textGeneration({ model: 'microsoft/DialoGPT-medium', inputs: prompt, max_new_tokens: 200 });
+    return JSON.parse(response.generated_text.match(/\[.*\]/s)?.[0] || '[]');
+  }
 
-  if (!response.ok) throw new Error(`HF API error: ${response.status} - Model busy? Try again.`);
-  const { generated_text } = await response.json();
-  return generated_text.slice(0, 400) + '\n\n(Pro: Download PDF + custom tweaks)';
-}
+  function buildPlanPrompt(templates, trends, request) {
+    const system = `Output ONLY JSON plan for "${request}". Use templates/examples. Include instructions/examples in tasks. Schema: goal (string), phases (array of {title, tasks: [{task_id, title, owner, start_date, end_date, success_metric, instruction, example}]}). Incorporate trends.`;
+    const fewShot = templates.map(t => JSON.stringify(t)).join('\n---\n');
+    const user = `Trends: ${JSON.stringify(trends)}`;
+
+    return [
+      { role: 'system', content: system },
+      { role: 'assistant', content: fewShot },
+      { role: 'user', content: user },
+    ];
+  }
+
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
       <div className="text-center max-w-md w-full space-y-4">
@@ -236,7 +290,7 @@ async function generateGrowthPlan(need) {
                     value={userNeed}
                     onChange={(e) => setUserNeed(e.target.value)}
                     rows={4}
-                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-system text-sm pr-20"  // Extra right padding for corner
+                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-system text-sm pr-20"
                     placeholder="What do you need AI for today? (or upload a file)"
                     required
                     disabled={loadingSubmit}
@@ -269,12 +323,12 @@ async function generateGrowthPlan(need) {
                   disabled={loadingSubmit}
                   className="user-friendly-button w-full"
                 >
-                  {loadingSubmit ? 'Sending...' : 'Send to Next Steps →'}
+                  {loadingSubmit ? 'Generating...' : 'Send to Next Steps →'}
                 </button>
               </form>
             ) : (
               <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl">
-                <p className="font-system text-xs">Got it! We're processing your request. Redirecting...</p>
+                <p className="font-system text-xs">Plan generated! Redirecting...</p>
                 <button
                   onClick={() => { setSubmitted(false); setUserNeed(''); setFile(null); }}
                   className="mt-1 text-blue-600 underline font-system text-xs"
@@ -289,3 +343,4 @@ async function generateGrowthPlan(need) {
     </div>
   );
 }
+```
